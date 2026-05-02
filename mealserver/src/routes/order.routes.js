@@ -1,7 +1,5 @@
-const orderStore = require('../store/orderStore');
-const { menuItems } = require('../data/menu');
+const orderService = require('../services/order.service');
 const { ORDER_STATUS } = require('../config/constants');
-const { startStatusSimulation } = require('../ws/wsHandler');
 
 async function orderRoutes(fastify, options) {
   // Schema for creating an order
@@ -42,37 +40,12 @@ async function orderRoutes(fastify, options) {
 
   // POST /api/orders
   fastify.post('/orders', { schema: createOrderSchema }, async (request, reply) => {
-    const { name, address, phone, items: itemRequests } = request.body;
-    
-    // Expand items with names and prices from menuItems
-    let totalAmount = 0;
-    const enrichedItems = itemRequests.map(itemReq => {
-      const menuItem = menuItems.find(m => m.id === itemReq.id);
-      if (!menuItem) {
-        throw new Error(`Item with id ${itemReq.id} not found`);
-      }
-      const itemTotal = menuItem.price * itemReq.quantity;
-      totalAmount += itemTotal;
-      return {
-        ...itemReq,
-        name: menuItem.name,
-        price: menuItem.price,
-        image: menuItem.image
-      };
-    });
-    
-    const order = orderStore.createOrder({ 
-      name, 
-      address, 
-      phone, 
-      items: enrichedItems, 
-      totalAmount 
-    });
-    
-    // Start status simulation
-    startStatusSimulation(fastify, order.id);
-    
-    reply.code(201).send({ orderId: order.id });
+    try {
+      const order = await orderService.createOrder(fastify, request.body);
+      reply.code(201).send({ orderId: order.id });
+    } catch (error) {
+      reply.code(400).send({ error: error.message });
+    }
   });
 
   // GET /api/orders/:id
@@ -96,12 +69,12 @@ async function orderRoutes(fastify, options) {
       }
     }
   }, async (request, reply) => {
-    const { id } = request.params;
-    const order = orderStore.getOrder(id);
-    if (!order) {
-      return reply.code(404).send({ error: 'Order not found' });
+    try {
+      const order = await orderService.getOrder(request.params.id);
+      return order;
+    } catch (error) {
+      return reply.code(404).send({ error: error.message });
     }
-    return order;
   });
 
   // PATCH /api/orders/:id/status
@@ -116,14 +89,8 @@ async function orderRoutes(fastify, options) {
       }
     }
   }, async (request, reply) => {
-    const { id } = request.params;
-    const { status } = request.body;
-    
     try {
-      const order = orderStore.updateOrderStatus(id, status);
-      if (!order) {
-        return reply.code(404).send({ error: 'Order not found' });
-      }
+      const order = await orderService.updateStatus(request.params.id, request.body.status);
       return order;
     } catch (error) {
       return reply.code(400).send({ error: error.message });
@@ -132,7 +99,7 @@ async function orderRoutes(fastify, options) {
 
   // GET /api/orders (Helper to see all orders)
   fastify.get('/orders', async (request, reply) => {
-    return orderStore.getAllOrders();
+    return await orderService.getAllOrders();
   });
 }
 

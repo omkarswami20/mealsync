@@ -1,4 +1,4 @@
-const { menuItems } = require('../data/menu');
+const menuService = require('../services/menu.service');
 
 async function menuRoutes(fastify, options) {
   const menuSchema = {
@@ -21,7 +21,7 @@ async function menuRoutes(fastify, options) {
   };
 
   fastify.get('/menu', { schema: menuSchema }, async (request, reply) => {
-    return menuItems;
+    return await menuService.getAllItems();
   });
 }
 
